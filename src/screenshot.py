@@ -6,10 +6,14 @@ from pathlib import Path
 from PIL import ImageGrab
 
 
-def capture_region(root: tk.Tk) -> None:
+def capture_region(root: tk.Tk) -> bool:
     """Hide the main window, let the user drag a rectangle on a semi-transparent
     overlay, then save the selected screen region to ``data/raw/screenshot.png``.
-    Press ``Esc`` to cancel without saving."""
+    Press ``Esc`` to cancel without saving.
+
+    Returns ``True`` if a screenshot was successfully captured, ``False`` if the
+    user cancelled or the selected area was too small.
+    """
 
     # ── Hide the main window ─────────────────────────────────
     root.withdraw()
@@ -41,6 +45,7 @@ def capture_region(root: tk.Tk) -> None:
     start_x = 0
     start_y = 0
     rect_id = None
+    captured = False
 
     def on_press(event: tk.Event) -> None:
         nonlocal start_x, start_y, rect_id
@@ -58,6 +63,8 @@ def capture_region(root: tk.Tk) -> None:
             canvas.coords(rect_id, start_x, start_y, event.x, event.y)
 
     def on_release(event: tk.Event) -> None:
+        nonlocal captured
+
         end_x, end_y = event.x, event.y
 
         # Normalize so (x1,y1) is top-left and (x2,y2) is bottom-right
@@ -65,7 +72,6 @@ def capture_region(root: tk.Tk) -> None:
         y1, y2 = sorted((start_y, end_y))
 
         overlay.destroy()
-        root.update_idletasks()
 
         # Only save when the selected area is meaningful
         if x2 - x1 >= 5 and y2 - y1 >= 5:
@@ -74,13 +80,10 @@ def capture_region(root: tk.Tk) -> None:
 
             img = ImageGrab.grab(bbox=(x1, y1, x2, y2))
             img.save(out_dir / "screenshot.png")
-
-        root.deiconify()
+            captured = True
 
     def on_escape(_event: tk.Event) -> None:
         overlay.destroy()
-        root.update_idletasks()
-        root.deiconify()
 
     # ── Bind events ──────────────────────────────────────────
     canvas.bind("<ButtonPress-1>", on_press)
@@ -91,3 +94,9 @@ def capture_region(root: tk.Tk) -> None:
     # Grab focus so Escape reaches the overlay immediately
     overlay.focus_force()
     overlay.grab_set()
+
+    # Block until the user finishes (or cancels) the selection
+    root.wait_window(overlay)
+    root.deiconify()
+
+    return captured

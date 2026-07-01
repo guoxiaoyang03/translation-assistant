@@ -21,35 +21,60 @@ def _get_reader() -> easyocr.Reader:
     return _reader
 
 
-def translate_image(image_path: str, target_lang: str = "zh-CN") -> str:
-    """OCR the image at *image_path*, then translate the recognised text.
+def _normalize_lang(code: str) -> str:
+    """Normalize a language code for the translators (Bing) backend.
 
-    Returns the translated string, or an error / empty-result message.
+    ``zh-CN`` is mapped to ``zh-Hans``, which Bing expects for simplified
+    Chinese.  All other codes pass through unchanged.
+    """
+    if code == "zh-CN":
+        return "zh-Hans"
+    return code
+
+
+def translate_text(text: str, source_lang: str, target_lang: str) -> str:
+    """Translate *text* from *source_lang* to *target_lang*.
+
+    Returns the translated string, or an error message.
+    """
+    if not text.strip():
+        return "源文本为空，无法翻译"
+
+    try:
+        result = ts.translate_text(
+            text,
+            translator="bing",
+            from_language=_normalize_lang(source_lang),
+            to_language=_normalize_lang(target_lang),
+        )
+    except Exception as exc:
+        return f"翻译请求失败：{exc}"
+
+    return result
+
+
+def translate_image(image_path: str, source_lang: str, target_lang: str) -> tuple[str, str]:
+    """OCR the image at *image_path*, then translate the recognised text
+    from *source_lang* to *target_lang*.
+
+    Returns a ``(translated_text, ocr_text)`` tuple.  On OCR failure both
+    elements contain the error message; on empty result both contain
+    ``"未识别到文字"``.
     """
     try:
         reader = _get_reader()
         results = reader.readtext(image_path)
     except Exception as exc:
-        return f"OCR 识别失败：{exc}"
+        msg = f"OCR 识别失败：{exc}"
+        return (msg, msg)
 
     if not results:
-        return "未识别到文字"
+        msg = "未识别到文字"
+        return (msg, msg)
 
     # Preserve line breaks — each detected block becomes one line
     lines = [item[1] for item in results]
     source_text = "\n".join(lines)
 
-    # Map to Bing language codes ("zh-CN" → "zh-Hans", etc.)
-    to_lang = "zh-Hans" if target_lang == "zh-CN" else target_lang
-
-    try:
-        translated = ts.translate_text(
-            source_text,
-            translator="bing",
-            from_language="auto",
-            to_language=to_lang,
-        )
-    except Exception as exc:
-        return f"翻译请求失败：{exc}"
-
-    return translated
+    translated = translate_text(source_text, source_lang, target_lang)
+    return (translated, source_text)
