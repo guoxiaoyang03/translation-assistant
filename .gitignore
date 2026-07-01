@@ -45,3 +45,4 @@ data/easyocr_models/              # ← 新增OCR 模型缓存（~500MB+)
 Thumbs.db
 .DS_Store
 desktop.ini
+
